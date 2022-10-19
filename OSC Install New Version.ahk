@@ -1,4 +1,4 @@
-; v1.1.6
+; v1.1.7
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -37,6 +37,9 @@ if (currVersion == latestVersion)
 	upToDate()
 
 updateType := changelog ~= "i)midi" | changelog ~= "i)electron" ? "major" : "minor"
+
+if (!FileExist(oscPath "\open-stage-control.exe"))
+	updateType := "major"
 
 if (updateType == "major")
 	fileRegex := "i)win32-x64.zip"
@@ -231,13 +234,13 @@ checkAdminStatus() {
 		DllCall("Kernel32.dll\GlobalFree", "Ptr", TDCallback)
 
 		If (Button == 8) { ; Close
+			Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
+			ExitApp
 
 		} Else If (Button == 2) { ; Timeout
-
+			Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
+			ExitApp
 		}
-
-		Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
-		ExitApp
 	}
 }
 
