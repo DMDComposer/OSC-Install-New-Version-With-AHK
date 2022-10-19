@@ -14,6 +14,9 @@ if (!A_IsAdmin){ ;http://ahkscript.org/docs/Variables.htm#IsAdmin
 	ExitApp
 }
 
+if (!FileExist(A_ScriptDir "\settings.ini"))
+	IniWrite, % "", % A_ScriptDir "\settings.ini", settings, oscPath
+
 IniRead, oscPath, % A_ScriptDir "\settings.ini", settings, oscPath
 global userOSCPath := checkUserOSCPath(oscPath)
 
@@ -40,6 +43,9 @@ if (currVersion == latestVersion) {
 	m("You are running the latest version of Open Stage Control")
 	ExitApp
 }
+
+if (changelog ~= "i)midi" | changelog ~= "i)electron")
+	m("need to run a full install")
 
 Loop % assets.assets.Length() {
 	if (assets.assets[A_Index].name ~= "i)node.zip") {
