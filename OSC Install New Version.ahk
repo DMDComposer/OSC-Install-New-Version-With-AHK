@@ -1,18 +1,13 @@
-; v1.0.6
+; v1.1.6
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #Include %A_ScriptDir%\Includes\Jxon.ahk
-#Include %A_ScriptDir%\Includes\m.ahk
 #Include %A_ScriptDir%\Includes\Notify.ahk
 ; --------------------------------------
 
-if (!A_IsAdmin){ ;http://ahkscript.org/docs/Variables.htm#IsAdmin
-	MsgBox,, NOT ADMIN, You must run this script as an administrator, restarting app...
-	Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
-	ExitApp
-}
+checkAdminStatus()
 
 if (!FileExist(A_ScriptDir "\settings.ini"))
 	IniWrite, % "", % A_ScriptDir "\settings.ini", settings, oscPath
@@ -33,50 +28,48 @@ if (req.status != 200) {
 	return
 }
 
-; res := ConvertResponseBody(req)
 res := req.ResponseBody
 assets := JXON_Load(BinArr_ToString(res))
 changelog := assets.body
 latestVersion := SubStr(assets.tag_name, 2)
 
-if (currVersion == latestVersion) {
-	m("You are running the latest version of Open Stage Control")
-	ExitApp
-}
+if (currVersion == latestVersion)
+	upToDate()
 
-if (changelog ~= "i)midi" | changelog ~= "i)electron")
-	m("need to run a full install")
+updateType := changelog ~= "i)midi" | changelog ~= "i)electron" ? "major" : "minor"
+
+if (updateType == "major")
+	fileRegex := "i)win32-x64.zip"
+else
+	fileRegex := "i)node.zip"
 
 Loop % assets.assets.Length() {
-	if (assets.assets[A_Index].name ~= "i)node.zip") {
+	if (assets.assets[A_Index].name ~= fileRegex) {
 		latestVersion := assets.assets[A_Index].name
 		latestVersionURL := assets.assets[A_Index].browser_download_url
 		Break
 	}
 }
 if (!latestVersion) {
-	m("couldn't find OSC latest version for Windows")
+	MsgBox, 4, % "couldn't find OSC latest version for Windows"
 	ExitApp
 }
 
-MSGBox, 4, OSC Installing New Version , % latestVersion ": was found, would you like to install it?`nChanges Included:`n`n" changelog
-IfMsgBox, No
-Exit
+MsgBox 0x21, OSC Installing New Version, % latestVersion ": was found`, would you like to install it?`nChanges Included:`n`n" changelog
+IfMsgBox Cancel
+ExitApp
 
 Notify().AddWindow(latestVersion ": is installing now", {Title:"found latest version", Font:"Sans Serif", TitleFont:"Sans Serif", Icon:userOSCPath "\open-stage-control.exe", Animate:"Right, Slide", ShowDelay:100, IconSize:64, TitleSize:14, Size:20, Radius:26, Time:2500, Background:"0x2C323A", Color:"0xD8DFE9", TitleColor:"0xD8DFE9"})
-; example URL: https://github.com/jean-emmanuel/open-stage-control/releases/download/v1.16.2/open-stage-control-1.16.2-win32-x64.zip
-; UrlDownloadToFile, % "https://github.com/jean-emmanuel/open-stage-control/releases/download/v1.16.2/" latestVersion, % A_ScriptDir "/" latestVersion
 UrlDownloadToFile, % latestVersionURL, % A_ScriptDir "/" latestVersion
 
-if WinExist("Open Stage Control")												; Close OSC before installing new version
+if WinExist("ahk_exe open-stage-control.exe") ; Close OSC before installing new version
 	WinClose, Open Stage Control
 
 OSC_Zip := A_ScriptDir "\" latestVersion
-OSC_Folder := userOSCPath "\resources\app"
-7zip := "C:\Program Files\7-Zip"
+OSC_Folder := updateType == "minor" ? userOSCPath "\resources\app" : userOSCPath
 SplitPath, OSC_Zip, vName, vDir, vEXT, vNNE, vDrive
-if (vEXT != "zip"){ 														; If the OSC Zip isn't on clipboard, then exit app
-	m("OSC Zip not on clipboard")
+if (vEXT != "zip") {
+	MsgBox % "Something went wrong with downloading the zip..."
 	ExitApp
 }
 FileDelete, % OSC_Folder "\*.*"
@@ -94,20 +87,32 @@ While(!FileExist(OSC_Zip_New))
 	Sleep, 10
 
 DetectHiddenWindows, On
-; Run, "%7zip%\7z.exe" x "%OSC_Zip_New%" -o"%OSC_Folder%"\ -y, % 7zip, Hide, PID
 Unzip(OSC_Zip_New, OSC_Folder)
 Sleep, 1000 ; Wait for unzip to finish
 
 while (WinExist("ahk_pid" PID))
 	Sleep, 10
 
-SplitPath, OSC_Zip_New, vvName, vAppDir, vvEXT, vvNNE, vvDrive
-OSC_Unzip := vAppDir . "\" . vvNNE
-SplitPath, OSC_Folder,,vResourcesDir
-Loop, Files, % OSC_Unzip "\*.*", F
-	FileMove, % A_LoopFileFullPath, % vAppDir, 1
-Loop, Files, % OSC_Unzip "\*.*", RD
-	FileMoveDir, % A_LoopFileFullPath, % vResourcesDir "\app", 1
+if (updateType == "minor") {
+	SplitPath, OSC_Zip_New, vvName, vAppDir, vvEXT, vvNNE, vvDrive
+	OSC_Unzip := vAppDir . "\" . vvNNE
+	SplitPath, OSC_Folder,,vResourcesDir
+	Loop, Files, % OSC_Unzip "\*.*", F
+		FileMove, % A_LoopFileFullPath, % vAppDir, 1
+	Loop, Files, % OSC_Unzip "\*.*", RD
+		FileMoveDir, % A_LoopFileFullPath, % vResourcesDir "\app", 1
+}
+
+if (updateType == "major") {
+	SplitPath, OSC_Zip_New, vvName, vvDir, vvEXT, vvNNE, vvDrive
+	OSC_Unzip := vvDir . "\" . vvNNE
+	SplitPath, OSC_Folder,,vvvDir
+	Loop, Files, % OSC_Unzip "\*.*", F
+		FileMove, %A_LoopFileFullPath%, % vvvDir . "\Open Stage Control", 1
+	Loop, Files, % OSC_Unzip "\*.*", RD
+		FileMoveDir, %A_LoopFileFullPath%, % vvvDir . "\Open Stage Control", 1
+}
+
 FileGetSize, vSize, % OSC_Unzip
 If (vSize = 0)
 	FileRemoveDir, % OSC_Unzip
@@ -117,15 +122,8 @@ Notify().AddWindow("has been Installed", {Title:vName, Font:"Sans Serif", TitleF
 Run, % userOSCPath . "\open-stage-control.exe"
 DetectHiddenWindows, Off
 
-Sleep, 2500																; Give enough time for script to finish before exiting
+Sleep, 2500	; Give enough time for script to finish before exiting
 ExitApp
-
-ConvertResponseBody(oHTTP){
-	Bytes := oHTTP.Responsebody ; Responsebody has an array of bytes. Single Characters
-	Loop, % oHTTP.GetResponseHeader("Content-Length") ; Loop over Responsebody 1 byte (1 single character) at a time
-		Text .= Chr(bytes[A_Index-1])
-	return Text
-}
 
 BinArr_ToString(BinArr, Encoding := "UTF-8") {
 	oADO := ComObjCreate("ADODB.Stream")
@@ -178,9 +176,81 @@ checkUserOSCPath(byRef path) {
 	OnExit("updateSettingsIni")
 	return path
 }
-; sZip = the fullpath of the zip file, sUnz the folder to contain the extracted files
-Unzip(sZip, sUnz)	{
+
+Unzip(sZip, sUnz) { ; sZip = the fullpath of the zip file, sUnz the folder to contain the extracted files
 	FileCreateDir, %sUnz%
 	psh := ComObjCreate("Shell.Application")
 	psh.Namespace( sUnz ).CopyHere( psh.Namespace( sZip ).items, 4|16 )
+}
+
+UpToDate() {
+	OnMessage(0x44, "OnMsgBox")
+	MsgBox 0x40, Latest Update, You are running the latest version of Open Stage Control
+	OnMessage(0x44, "")
+	ExitApp
+}
+
+OnMsgBox() {
+	DetectHiddenWindows, On
+	Process, Exist
+	If (WinExist("ahk_class #32770 ahk_pid " . ErrorLevel)) {
+		ControlSetText Button1, Exit
+	}
+}
+
+checkAdminStatus() {
+	if (!A_IsAdmin){ ;http://ahkscript.org/docs/Variables.htm#IsAdmin
+		Instruction := "Restarting App..."
+		Content := "You must run this script as an administrator"
+		Title := "NOT ADMIN"
+		MainIcon := 0xFFFC
+		Flags := 0xE00
+		Buttons := 0x20
+		TDCallback := RegisterCallback("TDCallback", "Fast")
+		CBData := {}
+		CBData.Marquee := True
+		CBData.Timeout := 3000 ; ms
+
+		; TASKDIALOGCONFIG structure
+		x64 := A_PtrSize == 8
+		NumPut(VarSetCapacity(TDC, x64 ? 160 : 96, 0), TDC, 0, "UInt") ; cbSize
+		NumPut(Flags, TDC, x64 ? 20 : 12, "Int") ; dwFlags
+		NumPut(Buttons, TDC, x64 ? 24 : 16, "Int") ; dwCommonButtons
+		NumPut(&Title, TDC, x64 ? 28 : 20, "Ptr") ; pszWindowTitle
+		NumPut(MainIcon, TDC, x64 ? 36 : 24, "Ptr") ; pszMainIcon
+		NumPut(&Instruction, TDC, x64 ? 44 : 28, "Ptr") ; pszMainInstruction
+		NumPut(&Content, TDC, x64 ? 52 : 32, "Ptr") ; pszContent
+		NumPut(TDCallback, TDC, x64 ? 140 : 84, "Ptr") ; pfCallback
+		NumPut(&CBData, TDC, x64 ? 148 : 88, "Ptr") ; lpCallbackData
+
+		DllCall("Comctl32.dll\TaskDialogIndirect", "Ptr", &TDC
+			, "Int*", Button := 0
+			, "Int*", Radio := 0
+		, "Int*", Checked := 0)
+
+		DllCall("Kernel32.dll\GlobalFree", "Ptr", TDCallback)
+
+		If (Button == 8) { ; Close
+
+		} Else If (Button == 2) { ; Timeout
+
+		}
+
+		Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
+		ExitApp
+	}
+}
+
+TDCallback(hWnd, Notification, wParam, lParam, RefData) {
+	Local CBData := Object(RefData)
+
+	If (Notification == 4 && wParam > CBData.Timeout) {
+		; TDM_CLICK_BUTTON := 0x466, IDCANCEL := 2
+		PostMessage 0x466, 2, 0,, ahk_id %hWnd%
+	}
+
+	If (Notification == 0 && CBData.Marquee) {
+		; TDM_SET_PROGRESS_BAR_MARQUEE
+		DllCall("PostMessage", "Ptr", hWnd, "UInt", 0x46B, "UInt", 1, "UInt", 50)
+	}
 }
