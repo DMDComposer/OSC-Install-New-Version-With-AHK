@@ -127,3 +127,4 @@ dist
 .pnp.*
 node_modules
 /public/build
+/settings.ini

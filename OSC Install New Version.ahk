@@ -1,9 +1,11 @@
-; v1.0.0
+; v1.0.1
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #Include %A_ScriptDir%\Includes\cJson.ahk
+#Include %A_ScriptDir%\Includes\m.ahk
+#Include %A_ScriptDir%\Includes\Notify.ahk
 ; --------------------------------------
 IniRead, oscPath, % A_ScriptDir "\settings.ini", settings, oscPath
 global userOSCPath := checkUserOSCPath(oscPath)
