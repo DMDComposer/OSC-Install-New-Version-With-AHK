@@ -1,4 +1,4 @@
-; v1.0.4
+; v1.0.5
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -30,8 +30,9 @@ if (req.status != 200) {
 	return
 }
 
-res := ConvertResponseBody(req)
-assets := JXON_Load(res)
+; res := ConvertResponseBody(req)
+res := req.ResponseBody
+assets := JXON_Load(BinArr_ToString(res))
 changelog := assets.body
 latestVersion := SubStr(assets.tag_name, 2)
 
@@ -118,6 +119,20 @@ ConvertResponseBody(oHTTP){
 	Loop, % oHTTP.GetResponseHeader("Content-Length") ; Loop over Responsebody 1 byte (1 single character) at a time
 		Text .= Chr(bytes[A_Index-1])
 	return Text
+}
+
+BinArr_ToString(BinArr, Encoding := "UTF-8") {
+	oADO := ComObjCreate("ADODB.Stream")
+
+	oADO.Type := 1 ; adTypeBinary
+	oADO.Mode := 3 ; adModeReadWrite
+	oADO.Open
+	oADO.Write(BinArr)
+
+	oADO.Position := 0
+	oADO.Type := 2 ; adTypeText
+	oADO.Charset := Encoding
+	return oADO.ReadText, oADO.Close
 }
 
 FileGetInfo( lptstrFilename) {
