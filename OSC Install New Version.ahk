@@ -1,4 +1,4 @@
-; v1.0.5
+; v1.0.6
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -42,13 +42,12 @@ if (currVersion == latestVersion) {
 }
 
 Loop % assets.assets.Length() {
-	if (assets.assets[A_Index].name ~= "i)win32-x64.zip") {
+	if (assets.assets[A_Index].name ~= "i)node.zip") {
 		latestVersion := assets.assets[A_Index].name
 		latestVersionURL := assets.assets[A_Index].browser_download_url
 		Break
 	}
 }
-
 if (!latestVersion) {
 	m("couldn't find OSC latest version for Windows")
 	ExitApp
@@ -67,7 +66,7 @@ if WinExist("Open Stage Control")												; Close OSC before installing new v
 	WinClose, Open Stage Control
 
 OSC_Zip := A_ScriptDir "\" latestVersion
-OSC_Folder := userOSCPath
+OSC_Folder := userOSCPath "\resources\app"
 7zip := "C:\Program Files\7-Zip"
 SplitPath, OSC_Zip, vName, vDir, vEXT, vNNE, vDrive
 if (vEXT != "zip"){ 														; If the OSC Zip isn't on clipboard, then exit app
@@ -83,34 +82,35 @@ Loop, Files, % OSC_Folder "\*.*", D
 	}
 }
 
-FileMove, % OSC_Zip, % OSC_Folder
+FileMove, % OSC_Zip, % OSC_Folder, 1
 OSC_Zip_New := OSC_Folder . "\" . vName
 While(!FileExist(OSC_Zip_New))
 	Sleep, 10
+
 DetectHiddenWindows, On
 ; Run, "%7zip%\7z.exe" x "%OSC_Zip_New%" -o"%OSC_Folder%"\ -y, % 7zip, Hide, PID
 Unzip(OSC_Zip_New, OSC_Folder)
-Sleep, 1000 																; Sleep has to be here otherwise the while loop hasn't had enough time to grab the PID
+Sleep, 1000 ; Wait for unzip to finish
 
 while (WinExist("ahk_pid" PID))
 	Sleep, 10
 
-SplitPath, OSC_Zip_New, vvName, vvDir, vvEXT, vvNNE, vvDrive
-OSC_Unzip := vvDir . "\" . vvNNE
-SplitPath, OSC_Folder,,vvvDir
+SplitPath, OSC_Zip_New, vvName, vAppDir, vvEXT, vvNNE, vvDrive
+OSC_Unzip := vAppDir . "\" . vvNNE
+SplitPath, OSC_Folder,,vResourcesDir
 Loop, Files, % OSC_Unzip "\*.*", F
-	FileMove, %A_LoopFileFullPath%, % vvvDir . "\Open Stage Control", 1
+	FileMove, % A_LoopFileFullPath, % vAppDir, 1
 Loop, Files, % OSC_Unzip "\*.*", RD
-	FileMoveDir, %A_LoopFileFullPath%, % vvvDir . "\Open Stage Control", 1
-FileMove, % OSC_Unzip "\open-stage-control.exe", % vvvDir . "\Open Stage Control", 1 	; Cautionary as Loop sometimes wouldn't move the EXE file
+	FileMoveDir, % A_LoopFileFullPath, % vResourcesDir "\app", 1
 FileGetSize, vSize, % OSC_Unzip
 If (vSize = 0)
 	FileRemoveDir, % OSC_Unzip
 If (!FileExist(OSC_Unzip))
 	FileDelete, % OSC_Zip_New
 Notify().AddWindow("has been Installed", {Title:vName, Font:"Sans Serif", TitleFont:"Sans Serif", Icon:userOSCPath "\open-stage-control.exe", Animate:"Right, Slide", ShowDelay:100, IconSize:64, TitleSize:14, Size:20, Radius:26, Time:2500, Background:"0x2C323A", Color:"0xD8DFE9", TitleColor:"0xD8DFE9"})
-Run, % OSC_Folder . "\open-stage-control.exe"
+Run, % userOSCPath . "\open-stage-control.exe"
 DetectHiddenWindows, Off
+
 Sleep, 2500																; Give enough time for script to finish before exiting
 ExitApp
 
