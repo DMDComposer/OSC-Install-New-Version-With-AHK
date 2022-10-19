@@ -1,4 +1,4 @@
-; v1.0.3
+; v1.0.4
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -7,6 +7,13 @@ SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #Include %A_ScriptDir%\Includes\m.ahk
 #Include %A_ScriptDir%\Includes\Notify.ahk
 ; --------------------------------------
+
+if (!A_IsAdmin){ ;http://ahkscript.org/docs/Variables.htm#IsAdmin
+	MsgBox,, NOT ADMIN, You must run this script as an administrator, restarting app...
+	Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
+	ExitApp
+}
+
 IniRead, oscPath, % A_ScriptDir "\settings.ini", settings, oscPath
 global userOSCPath := checkUserOSCPath(oscPath)
 
@@ -80,7 +87,8 @@ OSC_Zip_New := OSC_Folder . "\" . vName
 While(!FileExist(OSC_Zip_New))
 	Sleep, 10
 DetectHiddenWindows, On
-Run, "%7zip%\7z.exe" x "%OSC_Zip_New%" -o"%OSC_Folder%"\ -y, % 7zip, Hide, PID
+; Run, "%7zip%\7z.exe" x "%OSC_Zip_New%" -o"%OSC_Folder%"\ -y, % 7zip, Hide, PID
+Unzip(OSC_Zip_New, OSC_Folder)
 Sleep, 1000 																; Sleep has to be here otherwise the while loop hasn't had enough time to grab the PID
 
 while (WinExist("ahk_pid" PID))
@@ -148,4 +156,10 @@ checkUserOSCPath(byRef path) {
 	}
 	OnExit("updateSettingsIni")
 	return path
+}
+; sZip = the fullpath of the zip file, sUnz the folder to contain the extracted files
+Unzip(sZip, sUnz)	{
+	FileCreateDir, %sUnz%
+	psh := ComObjCreate("Shell.Application")
+	psh.Namespace( sUnz ).CopyHere( psh.Namespace( sZip ).items, 4|16 )
 }
