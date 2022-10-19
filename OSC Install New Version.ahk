@@ -1,4 +1,4 @@
-; v1.0.2
+; v1.0.3
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -139,6 +139,11 @@ checkUserOSCPath(byRef path) {
 		InputBox, path, Set OSC Directory, Set a valid OSC Directory for the install
 		If (ErrorLevel)
 			ExitApp
+		FileCreateDir, % Path
+		If (ErrorLevel) {
+			MsgBox, 48, Error, Could not create the path you listed, please run as admin or manually created the path and restart.
+			ExitApp
+		}
 		checkUserOSCPath(path)
 	}
 	OnExit("updateSettingsIni")
