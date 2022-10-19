@@ -15,11 +15,11 @@ m(x*){
 			if (IsObject(b))
 				Msg .= Obj2String(b)
 			else {
-				; Try Msg .= Obj2String(JSON.Load(b))
-				; catch
-				; 	Msg .= b "`r`n"
-				; if (Msg == "")
-				Msg .= b "`r`n"
+				Try Msg .= Obj2String(JXON_Load(b))
+				catch
+					Msg .= b "`r`n"
+				if (Msg == "")
+					Msg .= b "`r`n"
 			}
 		}
 	}

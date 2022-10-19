@@ -1,9 +1,9 @@
-; v1.0.1
+; v1.0.2
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
-#Include %A_ScriptDir%\Includes\cJson.ahk
+#Include %A_ScriptDir%\Includes\Jxon.ahk
 #Include %A_ScriptDir%\Includes\m.ahk
 #Include %A_ScriptDir%\Includes\Notify.ahk
 ; --------------------------------------
@@ -13,12 +13,18 @@ global userOSCPath := checkUserOSCPath(oscPath)
 currVersion := FileGetInfo(userOSCPath "\open-stage-control.exe").FileVersion
 
 Endpoint := "https://api.github.com/repos/jean-emmanuel/open-stage-control/releases/latest"
-HTTP := ComObjCreate("WinHttp.WinHttpRequest.5.1")
-HTTP.Open("GET", Endpoint)
-HTTP.Send()
-response := ConvertResponseBody(HTTP)
+req := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+req.Open("GET", Endpoint, true)
+req.Send()
+req.WaitForResponse()
 
-assets := JSON.Load(response)
+if (req.status != 200) {
+	MsgBox, % "Error finding latestVersion: " req.status
+	return
+}
+
+res := ConvertResponseBody(req)
+assets := JXON_Load(res)
 changelog := assets.body
 latestVersion := SubStr(assets.tag_name, 2)
 
