@@ -1,4 +1,4 @@
-; v1.1.10
+; v1.2.10
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -19,7 +19,7 @@ global notificationSettings := {Title: ""
 	, TitleSize: 14
 	, Size: 20
 	, Radius: 26
-	, Time: 2500
+	, Time: 999999
 	, Background: "0x2C323A"
 	, Color: "0xD8DFE9"
 , TitleColor: "0xD8DFE9"}
@@ -40,10 +40,29 @@ assets := JXON_Load(BinArr_ToString(res))
 changelog := assets.body
 latestVersion := SubStr(assets.tag_name, 2)
 
-if (currVersion == latestVersion)
-	upToDate()
-
 updateType := (changelog ~= "i)midi" | changelog ~= "i)electron") ? "major" : "minor"
+
+if (currVersion == latestVersion) {
+	checkForBeta := upToDate(currVersion)
+	if (checkForBeta == false)
+		ExitApp
+	Endpoint := "https://api.github.com/repos/jean-emmanuel/open-stage-control/releases"
+	req := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+	req.Open("GET", Endpoint, true)
+	req.Send()
+	req.WaitForResponse()
+
+	if (req.status != 200)
+		errorTryAgain("ERROR", "There was an error with the request. Please try again later. `nError: " req.status)
+
+	res := req.ResponseBody
+	assets := JXON_Load(BinArr_ToString(res))
+	assets := assets.1
+	changelog := assets.body
+	latestVersion := SubStr(assets.tag_name, 2)
+
+	updateType := "major"
+}
 
 if (!FileExist(oscPath "\open-stage-control.exe"))
 	updateType := "major"
@@ -69,7 +88,7 @@ IfMsgBox OK, {
 }
 
 notificationSettings.title := "found latest version"
-Notify().AddWindow("has been Installed", notificationSettings)
+Notify().AddWindow("downloading update now...", notificationSettings)
 
 UrlDownloadToFile, % latestVersionURL, % A_ScriptDir "/" latestVersion
 
@@ -187,18 +206,64 @@ Unzip(zipFullPath, outputDir) {
 	psh.Namespace( outputDir ).CopyHere( psh.Namespace( zipFullPath ).items, 4|16 )
 }
 
-UpToDate() {
-	OnMessage(0x44, "OnMsgBox")
-	MsgBox 0x40, Latest Update, You are running the latest version of Open Stage Control
-	OnMessage(0x44, "")
-	ExitApp
+UpToDate(version) {
+	Instruction := "You're currently up to date!"
+	Content := "Your current version is: " version
+	Title := "Checking for Updates"
+	MainIcon := 0xFFFD
+	Flags := 0x810
+	CustomButtons := []
+	CustomButtons.Push([101, "Check for Beta?"])
+	CustomButtons.Push([102, "Exit"])
+	cButtons := CustomButtons.Length()
+	VarSetCapacity(pButtons, 4 * cButtons + A_PtrSize * cButtons, 0)
+	Loop %cButtons% {
+		iButtonID := CustomButtons[A_Index][1]
+		iButtonText := &(b%A_Index% := CustomButtons[A_Index][2])
+		NumPut(iButtonID, pButtons, (4 + A_PtrSize) * (A_Index - 1), "Int")
+		NumPut(iButtonText, pButtons, (4 + A_PtrSize) * A_Index - A_PtrSize, "Ptr")
+	}
+	DefaultButton := 102
+	TDCallback_UpToDate := RegisterCallback("TDCallback_UpToDate", "Fast")
+	CBData := {}
+	CBData.Timeout := 30000 ; ms
+
+	; TASKDIALOGCONFIG structure
+	x64 := A_PtrSize == 8
+	NumPut(VarSetCapacity(TDC, x64 ? 160 : 96, 0), TDC, 0, "UInt") ; cbSize
+	NumPut(Flags, TDC, x64 ? 20 : 12, "Int") ; dwFlags
+	NumPut(&Title, TDC, x64 ? 28 : 20, "Ptr") ; pszWindowTitle
+	NumPut(MainIcon, TDC, x64 ? 36 : 24, "Ptr") ; pszMainIcon
+	NumPut(&Instruction, TDC, x64 ? 44 : 28, "Ptr") ; pszMainInstruction
+	NumPut(&Content, TDC, x64 ? 52 : 32, "Ptr") ; pszContent
+	NumPut(cButtons, TDC, x64 ? 60 : 36, "UInt") ; cButtons
+	NumPut(&pButtons, TDC, x64 ? 64 : 40, "Ptr") ; pButtons
+	NumPut(DefaultButton, TDC, x64 ? 72 : 44, "Int") ; nDefaultButton
+	NumPut(TDCallback_UpToDate, TDC, x64 ? 140 : 84, "Ptr") ; pfCallback
+	NumPut(&CBData, TDC, x64 ? 148 : 88, "Ptr") ; lpCallbackData
+
+	DllCall("Comctl32.dll\TaskDialogIndirect", "Ptr", &TDC
+		, "Int*", Button := 0
+		, "Int*", Radio := 0
+	, "Int*", Checked := 0)
+
+	DllCall("Kernel32.dll\GlobalFree", "Ptr", TDCallback_UpToDate)
+
+	If (Button == 101) { ; Check for Beta?
+		return true
+	} Else If (Button == 102) { ; Exit
+		return false
+	} Else If (Button == 2) { ; Timeout
+		return false
+	}
 }
 
-OnMsgBox() {
-	DetectHiddenWindows, On
-	Process, Exist
-	If (WinExist("ahk_class #32770 ahk_pid " . ErrorLevel)) {
-		ControlSetText Button1, Exit
+TDCallback_UpToDate(hWnd, Notification, wParam, lParam, RefData) {
+	Local CBData := Object(RefData)
+
+	If (Notification == 4 && wParam > CBData.Timeout) {
+		; TDM_CLICK_BUTTON := 0x466, IDCANCEL := 2
+		PostMessage 0x466, 2, 0,, ahk_id %hWnd%
 	}
 }
 
