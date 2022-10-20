@@ -1,4 +1,4 @@
-; v1.1.8
+; v1.1.9
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -58,11 +58,8 @@ Loop % assets.assets.Length() {
 	}
 }
 
-if (!latestVersion) {
-	MsgBox, 4, %
+if (!latestVersion)
 	errorTryAgain("ERROR", "couldn't find OSC latest version for Windows")
-	ExitApp
-}
 
 MsgBox 0x41, OSC Installing New Version, % latestVersion ": was found`, would you like to install it?`nChanges Included:`n`n" changelog
 IfMsgBox OK, {
@@ -240,7 +237,9 @@ checkAdminStatus() {
 			ExitApp
 
 		} Else If (Button == 2) { ; Timeout
-			Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
+			Run *RunAs "%A_ScriptFullPath%",, UseErrorLevel ; Requires v1.0.92.01+
+			if(ErrorLevel)
+				ExitApp
 			ExitApp
 		}
 	}
