@@ -1,4 +1,4 @@
-; v1.1.7
+; v1.1.8
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -6,14 +6,23 @@ SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #Include %A_ScriptDir%\Includes\Jxon.ahk
 #Include %A_ScriptDir%\Includes\Notify.ahk
 ; --------------------------------------
-
 checkAdminStatus()
 
-if (!FileExist(A_ScriptDir "\settings.ini"))
-	IniWrite, % "", % A_ScriptDir "\settings.ini", settings, oscPath
-
-IniRead, oscPath, % A_ScriptDir "\settings.ini", settings, oscPath
 global userOSCPath := checkUserOSCPath(oscPath)
+global notificationSettings := {Title: ""
+	, Font: "Sans Serif"
+	, TitleFont: "Sans Serif"
+	, Icon: A_ScriptDir "\assets\logo.png"
+	, Animate: "Right, Slide"
+	, ShowDelay: 100
+	, IconSize: 64
+	, TitleSize: 14
+	, Size: 20
+	, Radius: 26
+	, Time: 2500
+	, Background: "0x2C323A"
+	, Color: "0xD8DFE9"
+, TitleColor: "0xD8DFE9"}
 
 currVersion := FileGetInfo(userOSCPath "\open-stage-control.exe").FileVersion
 
@@ -23,10 +32,8 @@ req.Open("GET", Endpoint, true)
 req.Send()
 req.WaitForResponse()
 
-if (req.status != 200) {
-	MsgBox, % "Error finding latestVersion: " req.status
-	return
-}
+if (req.status != 200)
+	errorTryAgain("ERROR", "There was an error with the request. Please try again later. `nError: " req.status)
 
 res := req.ResponseBody
 assets := JXON_Load(BinArr_ToString(res))
@@ -36,15 +43,12 @@ latestVersion := SubStr(assets.tag_name, 2)
 if (currVersion == latestVersion)
 	upToDate()
 
-updateType := changelog ~= "i)midi" | changelog ~= "i)electron" ? "major" : "minor"
+updateType := (changelog ~= "i)midi" | changelog ~= "i)electron") ? "major" : "minor"
 
 if (!FileExist(oscPath "\open-stage-control.exe"))
 	updateType := "major"
 
-if (updateType == "major")
-	fileRegex := "i)win32-x64.zip"
-else
-	fileRegex := "i)node.zip"
+fileRegex := updateType == "major" ? "i)win32-x64.zip" : "i)node.zip"
 
 Loop % assets.assets.Length() {
 	if (assets.assets[A_Index].name ~= fileRegex) {
@@ -53,28 +57,34 @@ Loop % assets.assets.Length() {
 		Break
 	}
 }
+
 if (!latestVersion) {
-	MsgBox, 4, % "couldn't find OSC latest version for Windows"
+	MsgBox, 4, %
+	errorTryAgain("ERROR", "couldn't find OSC latest version for Windows")
 	ExitApp
 }
 
-MsgBox 0x21, OSC Installing New Version, % latestVersion ": was found`, would you like to install it?`nChanges Included:`n`n" changelog
-IfMsgBox Cancel
-ExitApp
+MsgBox 0x41, OSC Installing New Version, % latestVersion ": was found`, would you like to install it?`nChanges Included:`n`n" changelog
+IfMsgBox OK, {
 
-Notify().AddWindow(latestVersion ": is installing now", {Title:"found latest version", Font:"Sans Serif", TitleFont:"Sans Serif", Icon:userOSCPath "\open-stage-control.exe", Animate:"Right, Slide", ShowDelay:100, IconSize:64, TitleSize:14, Size:20, Radius:26, Time:2500, Background:"0x2C323A", Color:"0xD8DFE9", TitleColor:"0xD8DFE9"})
+} Else IfMsgBox Cancel, {
+	ExitApp
+}
+
+notificationSettings.title := "found latest version"
+Notify().AddWindow("has been Installed", notificationSettings)
+
 UrlDownloadToFile, % latestVersionURL, % A_ScriptDir "/" latestVersion
 
 if WinExist("ahk_exe open-stage-control.exe") ; Close OSC before installing new version
-	WinClose, Open Stage Control
+	WinClose, % "ahk_exe open-stage-control.exe"
 
 OSC_Zip := A_ScriptDir "\" latestVersion
 OSC_Folder := updateType == "minor" ? userOSCPath "\resources\app" : userOSCPath
 SplitPath, OSC_Zip, vName, vDir, vEXT, vNNE, vDrive
-if (vEXT != "zip") {
-	MsgBox % "Something went wrong with downloading the zip..."
-	ExitApp
-}
+if (vEXT != "zip")
+	errorTryAgain("ERROR", "There was an error with the downloading the update. Please try again later.")
+
 FileDelete, % OSC_Folder "\*.*"
 Loop, Files, % OSC_Folder "\*.*", D
 {
@@ -92,36 +102,24 @@ While(!FileExist(OSC_Zip_New))
 DetectHiddenWindows, On
 Unzip(OSC_Zip_New, OSC_Folder)
 Sleep, 1000 ; Wait for unzip to finish
+SplitPath, OSC_Zip_New, vvName, vAppDir, vvEXT, vvNNE, vvDrive
+OSC_Unzip := vAppDir . "\" . vvNNE
+SplitPath, OSC_Folder,,vResourcesDir
 
-while (WinExist("ahk_pid" PID))
-	Sleep, 10
+Loop, Files, % OSC_Unzip "\*.*", F
+	FileMove, % A_LoopFileFullPath, % updateType == "major" ? vAppDir : vResourcesDir . "\Open Stage Control", 1
+Loop, Files, % OSC_Unzip "\*.*", RD
+	FileMoveDir, % A_LoopFileFullPath, % updateType == "major" ? vResourcesDir . "\Open Stage Control" : vResourcesDir "\app", 1
 
-if (updateType == "minor") {
-	SplitPath, OSC_Zip_New, vvName, vAppDir, vvEXT, vvNNE, vvDrive
-	OSC_Unzip := vAppDir . "\" . vvNNE
-	SplitPath, OSC_Folder,,vResourcesDir
-	Loop, Files, % OSC_Unzip "\*.*", F
-		FileMove, % A_LoopFileFullPath, % vAppDir, 1
-	Loop, Files, % OSC_Unzip "\*.*", RD
-		FileMoveDir, % A_LoopFileFullPath, % vResourcesDir "\app", 1
-}
-
-if (updateType == "major") {
-	SplitPath, OSC_Zip_New, vvName, vvDir, vvEXT, vvNNE, vvDrive
-	OSC_Unzip := vvDir . "\" . vvNNE
-	SplitPath, OSC_Folder,,vvvDir
-	Loop, Files, % OSC_Unzip "\*.*", F
-		FileMove, %A_LoopFileFullPath%, % vvvDir . "\Open Stage Control", 1
-	Loop, Files, % OSC_Unzip "\*.*", RD
-		FileMoveDir, %A_LoopFileFullPath%, % vvvDir . "\Open Stage Control", 1
-}
-
-FileGetSize, vSize, % OSC_Unzip
-If (vSize = 0)
+FileGetSize, fileSize, % OSC_Unzip
+If (fileSize = 0)
 	FileRemoveDir, % OSC_Unzip
 If (!FileExist(OSC_Unzip))
 	FileDelete, % OSC_Zip_New
-Notify().AddWindow("has been Installed", {Title:vName, Font:"Sans Serif", TitleFont:"Sans Serif", Icon:userOSCPath "\open-stage-control.exe", Animate:"Right, Slide", ShowDelay:100, IconSize:64, TitleSize:14, Size:20, Radius:26, Time:2500, Background:"0x2C323A", Color:"0xD8DFE9", TitleColor:"0xD8DFE9"})
+
+notificationSettings.title := vName
+Notify().AddWindow("has been Installed", notificationSettings)
+
 Run, % userOSCPath . "\open-stage-control.exe"
 DetectHiddenWindows, Off
 
@@ -163,6 +161,10 @@ updateSettingsIni() {
 }
 
 checkUserOSCPath(byRef path) {
+	if (!FileExist(A_ScriptDir "\settings.ini"))
+		IniWrite, % "", % A_ScriptDir "\settings.ini", settings, oscPath
+
+	IniRead, path, % A_ScriptDir "\settings.ini", settings, oscPath
 	pathExists := FileExist(path) == "D" ? true : false
 	if (!pathExists) {
 		MsgBox, 48, Error, OSC path not found. Please set a valid directory for your OSC install.
@@ -180,10 +182,10 @@ checkUserOSCPath(byRef path) {
 	return path
 }
 
-Unzip(sZip, sUnz) { ; sZip = the fullpath of the zip file, sUnz the folder to contain the extracted files
-	FileCreateDir, %sUnz%
+Unzip(zipFullPath, outputDir) {
+	FileCreateDir, %outputDir%
 	psh := ComObjCreate("Shell.Application")
-	psh.Namespace( sUnz ).CopyHere( psh.Namespace( sZip ).items, 4|16 )
+	psh.Namespace( outputDir ).CopyHere( psh.Namespace( zipFullPath ).items, 4|16 )
 }
 
 UpToDate() {
@@ -241,6 +243,27 @@ checkAdminStatus() {
 			Run *RunAs "%A_ScriptFullPath%" ; Requires v1.0.92.01+
 			ExitApp
 		}
+	}
+}
+
+errorTryAgain(title, message) {
+	OnMessage(0x44, "OnReqStatusError")
+	MsgBox 0x11, ERROR, % "There was an error with the request. Please try again later. `nError: " status
+	OnMessage(0x44, "")
+
+	IfMsgBox OK, {
+		Reload
+	} Else IfMsgBox Cancel, {
+		ExitApp
+	}
+}
+
+OnReqStatusError() {
+	DetectHiddenWindows, On
+	Process, Exist
+	If (WinExist("ahk_class #32770 ahk_pid " . ErrorLevel)) {
+		ControlSetText Button1, Try Again
+		ControlSetText Button2, Exit
 	}
 }
 
