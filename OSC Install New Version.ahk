@@ -1,4 +1,4 @@
-; v1.2.11
+; v1.3.12
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -24,7 +24,7 @@ global notificationSettings := {Title: ""
 	, Color: "0xD8DFE9"
 , TitleColor: "0xD8DFE9"}
 
-currVersion := FileGetInfo(userOSCPath "\open-stage-control.exe").FileVersion
+currVersion := checkForCurrentVersion(userOSCPath)
 
 Endpoint := "https://api.github.com/repos/jean-emmanuel/open-stage-control/releases/latest"
 req := ComObjCreate("WinHttp.WinHttpRequest.5.1")
@@ -43,8 +43,8 @@ latestVersion := SubStr(assets.tag_name, 2)
 updateType := (changelog ~= "i)midi" | changelog ~= "i)electron") ? "major" : "minor"
 
 if (currVersion == latestVersion) {
-	checkForBeta := upToDate(currVersion)
-	if (checkForBeta == false)
+	installBetaOrPrev := upToDate(currVersion)
+	if (installBetaOrPrev == false)
 		ExitApp
 	Endpoint := "https://api.github.com/repos/jean-emmanuel/open-stage-control/releases"
 	req := ComObjCreate("WinHttp.WinHttpRequest.5.1")
@@ -57,7 +57,8 @@ if (currVersion == latestVersion) {
 
 	res := req.ResponseBody
 	assets := JXON_Load(BinArr_ToString(res))
-	assets := assets.1
+	assets := (installBetaOrPrev == "previous") ? assets[getPreviousVersions(assets)] : assets.1
+
 	changelog := assets.body
 	latestVersion := SubStr(assets.tag_name, 2)
 
@@ -143,6 +144,88 @@ DetectHiddenWindows, Off
 Sleep, 2500	; Give enough time for script to finish before exiting
 ExitApp
 
+checkForCurrentVersion(userOSCPath) {
+	packageJSONPath := userOSCPath "\resources\app\package.json"
+	if (!FileExist(packageJSONPath)) {
+		currVersion := FileGetInfo(userOSCPath "\open-stage-control.exe").FileVersion
+	}else {
+		FileRead, packageJSON, % packageJSONPath
+		packageJSON := JXON_Load(packageJSON)
+		currVersion := packageJSON.version
+	}
+	return currVersion
+}
+
+getPreviousVersions(assets) {
+	prevVersions := []
+	for i,asset in assets
+		prevVersions.push(asset.tag_name)
+
+	return installPreviousVersion(prevVersions)
+}
+
+installPreviousVersion(prevVersions) {
+	Instruction := "Select which to install:"
+	Content := "in 30 seconds will default to the latest previous."
+	Title := "Install Previous Version"
+	MainIcon := 0xFFFD
+	Flags := 0x818
+	CustomButtons := []
+	CustomButtons.Push([101, prevVersions.2])
+	CustomButtons.Push([102, prevVersions.3])
+	CustomButtons.Push([103, prevVersions.4])
+	cButtons := CustomButtons.Length()
+	VarSetCapacity(pButtons, 4 * cButtons + A_PtrSize * cButtons, 0)
+	Loop %cButtons% {
+		iButtonID := CustomButtons[A_Index][1]
+		iButtonText := &(b%A_Index% := CustomButtons[A_Index][2])
+		NumPut(iButtonID, pButtons, (4 + A_PtrSize) * (A_Index - 1), "Int")
+		NumPut(iButtonText, pButtons, (4 + A_PtrSize) * A_Index - A_PtrSize, "Ptr")
+	}
+	DefaultButton := 101
+	ipv_Callback := RegisterCallback("ipv_Callback", "Fast")
+	CBData := {}
+	CBData.Timeout := 30000 ; ms
+
+	; TASKDIALOGCONFIG structure
+	x64 := A_PtrSize == 8
+	NumPut(VarSetCapacity(TDC, x64 ? 160 : 96, 0), TDC, 0, "UInt") ; cbSize
+	NumPut(Flags, TDC, x64 ? 20 : 12, "Int") ; dwFlags
+	NumPut(&Title, TDC, x64 ? 28 : 20, "Ptr") ; pszWindowTitle
+	NumPut(MainIcon, TDC, x64 ? 36 : 24, "Ptr") ; pszMainIcon
+	NumPut(&Instruction, TDC, x64 ? 44 : 28, "Ptr") ; pszMainInstruction
+	NumPut(&Content, TDC, x64 ? 52 : 32, "Ptr") ; pszContent
+	NumPut(cButtons, TDC, x64 ? 60 : 36, "UInt") ; cButtons
+	NumPut(&pButtons, TDC, x64 ? 64 : 40, "Ptr") ; pButtons
+	NumPut(DefaultButton, TDC, x64 ? 72 : 44, "Int") ; nDefaultButton
+	NumPut(ipv_Callback, TDC, x64 ? 140 : 84, "Ptr") ; pfCallback
+	NumPut(&CBData, TDC, x64 ? 148 : 88, "Ptr") ; lpCallbackData
+
+	DllCall("Comctl32.dll\TaskDialogIndirect", "Ptr", &TDC
+		, "Int*", Button := 0
+		, "Int*", Radio := 0
+	, "Int*", Checked := 0)
+
+	DllCall("Kernel32.dll\GlobalFree", "Ptr", ipv_Callback)
+
+	If (Button == 101 | Button == 2) { ; 1
+		return 2
+	} Else If (Button == 102) { ; 2
+		return 3
+	} Else If (Button == 103) { ; 3
+		return 4
+	}
+}
+
+ipv_Callback(hWnd, Notification, wParam, lParam, RefData) {
+	Local CBData := Object(RefData)
+
+	If (Notification == 4 && wParam > CBData.Timeout) {
+		; TDM_CLICK_BUTTON := 0x466, IDCANCEL := 2
+		PostMessage 0x466, 2, 0,, ahk_id %hWnd%
+	}
+}
+
 BinArr_ToString(BinArr, Encoding := "UTF-8") {
 	oADO := ComObjCreate("ADODB.Stream")
 
@@ -157,7 +240,7 @@ BinArr_ToString(BinArr, Encoding := "UTF-8") {
 	return oADO.ReadText, oADO.Close
 }
 
-FileGetInfo( lptstrFilename) {
+FileGetInfo(lptstrFilename) {
 	List := "Comments InternalName ProductName CompanyName LegalCopyright ProductVersion"
 	. " FileDescription LegalTrademarks PrivateBuild FileVersion OriginalFilename SpecialBuild"
 	dwLen := DllCall("Version.dll\GetFileVersionInfoSize", "Str", lptstrFilename, "Ptr", 0)
@@ -215,7 +298,8 @@ UpToDate(version) {
 	Flags := 0x810
 	CustomButtons := []
 	CustomButtons.Push([101, "Check for Beta?"])
-	CustomButtons.Push([102, "Exit"])
+	CustomButtons.Push([102, "Install Previous Version(s)?"])
+	CustomButtons.Push([103, "Exit"])
 	cButtons := CustomButtons.Length()
 	VarSetCapacity(pButtons, 4 * cButtons + A_PtrSize * cButtons, 0)
 	Loop %cButtons% {
@@ -224,7 +308,7 @@ UpToDate(version) {
 		NumPut(iButtonID, pButtons, (4 + A_PtrSize) * (A_Index - 1), "Int")
 		NumPut(iButtonText, pButtons, (4 + A_PtrSize) * A_Index - A_PtrSize, "Ptr")
 	}
-	DefaultButton := 102
+	DefaultButton := 103
 	TDCallback_UpToDate := RegisterCallback("TDCallback_UpToDate", "Fast")
 	CBData := {}
 	CBData.Timeout := 30000 ; ms
@@ -251,8 +335,10 @@ UpToDate(version) {
 	DllCall("Kernel32.dll\GlobalFree", "Ptr", TDCallback_UpToDate)
 
 	If (Button == 101) { ; Check for Beta?
-		return true
-	} Else If (Button == 102) { ; Exit
+		return "beta"
+	} Else If (Button == 102) { ; Install Previous Version(s)?
+		return "previous"
+	} Else If (Button == 103) { ; Exit
 		return false
 	} Else If (Button == 2) { ; Timeout
 		return false
