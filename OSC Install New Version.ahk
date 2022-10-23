@@ -1,4 +1,4 @@
-; v1.3.12
+; v1.3.13
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -208,7 +208,7 @@ installPreviousVersion(prevVersions) {
 
 	DllCall("Kernel32.dll\GlobalFree", "Ptr", ipv_Callback)
 
-	If (Button == 101 | Button == 2) { ; 1
+	If (Button == 101 || Button == 2) { ; 1
 		return 2
 	} Else If (Button == 102) { ; 2
 		return 3
