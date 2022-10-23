@@ -1,4 +1,4 @@
-; v1.2.10
+; v1.2.11
 #Requires Autohotkey v1.1.33+
 #SingleInstance, Force ; Limit one running version of this script
 SetBatchlines -1 ; run at maximum CPU utilization
@@ -110,7 +110,7 @@ Loop, Files, % OSC_Folder "\*.*", D
 	}
 }
 
-FileMove, % OSC_Zip, % OSC_Folder, 1
+FileMove, % OSC_Zip, % OSC_Folder "\*.*", 1
 OSC_Zip_New := OSC_Folder . "\" . vName
 While(!FileExist(OSC_Zip_New))
 	Sleep, 10
@@ -122,10 +122,11 @@ SplitPath, OSC_Zip_New, vvName, vAppDir, vvEXT, vvNNE, vvDrive
 OSC_Unzip := vAppDir . "\" . vvNNE
 SplitPath, OSC_Folder,,vResourcesDir
 
+destPath := updateType == "major" ? vResourcesDir . "\Open Stage Control" : vResourcesDir "\app"
 Loop, Files, % OSC_Unzip "\*.*", F
-	FileMove, % A_LoopFileFullPath, % updateType == "major" ? vAppDir : vResourcesDir . "\Open Stage Control", 1
+	FileMove, % A_LoopFileFullPath, % destPath, 1
 Loop, Files, % OSC_Unzip "\*.*", RD
-	FileMoveDir, % A_LoopFileFullPath, % updateType == "major" ? vResourcesDir . "\Open Stage Control" : vResourcesDir "\app", 1
+	FileMoveDir, % A_LoopFileFullPath, % destPath, 1
 
 FileGetSize, fileSize, % OSC_Unzip
 If (fileSize = 0)
